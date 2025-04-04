@@ -117,7 +117,7 @@ const CrowdHeatmap: React.FC<CrowdHeatmapProps> = ({ securityView = false }) => 
         const color = density > 75 ? "#ea384c" : density > 50 ? "#f6ad55" : "#4fd1c5";
         
         const contentString = `
-          <div style="padding: 8px; color: #fff; background: rgba(26, 31, 44, 0.9); border-radius: 4px; min-width: 150px;">
+          <div style="padding: 8px; color: #333; background: rgba(255, 255, 255, 0.95); border-radius: 4px; min-width: 150px;">
             <h3 style="margin: 0 0 8px; font-weight: bold;">${area.name}</h3>
             <div style="font-size: 12px; margin-bottom: 6px;">Current density: <span style="color: ${color}">${density}%</span></div>
             <div style="font-size: 12px;">Personnel: ${Math.floor(Math.random() * 5) + 1} Active</div>

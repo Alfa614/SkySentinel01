@@ -107,3 +107,17 @@ body {
 .map-container {
   @apply w-full h-64 md:h-96 relative overflow-hidden rounded-md border border-gray-700;
 }
+
+/* Improve text readability on dark backgrounds */
+input, textarea, select, button {
+  @apply text-white;
+}
+
+.text-muted-foreground {
+  @apply text-gray-300;
+}
+
+/* Ensure info window text is visible */
+.gm-style-iw {
+  color: #333;
+}
