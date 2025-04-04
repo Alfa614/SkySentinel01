@@ -1,45 +1,62 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, ChevronUp, ChevronDown, Maximize2, Minimize2 } from "lucide-react";
+import { GoogleMap, useJsApiLoader, HeatmapLayer } from "@react-google-maps/api";
+import { venueCenter, generateMockHeatmapPoints, generateRandomAlert, getDensityLevel, getRandomVenueArea } from "@/utils/heatmapData";
 
-// Mock heatmap data points (in a real app, this would come from backend)
-const generateMockHeatmapData = () => {
-  const venues = [
-    { id: "A1", name: "Main Stage", density: Math.random() * 100 },
-    { id: "A2", name: "Food Court", density: Math.random() * 100 },
-    { id: "A3", name: "VIP Area", density: Math.random() * 100 },
-    { id: "B1", name: "Second Stage", density: Math.random() * 100 },
-    { id: "B2", name: "Merchandise", density: Math.random() * 100 },
-    { id: "B3", name: "Restrooms", density: Math.random() * 100 },
-    { id: "C1", name: "Entry Gates", density: Math.random() * 100 },
-    { id: "C2", name: "Parking Area", density: Math.random() * 100 },
-    { id: "C3", name: "Medical Tent", density: Math.random() * 100 }
-  ];
-  
-  return venues.map(venue => ({
-    ...venue,
-    color: venue.density > 75 
-      ? "bg-alertred/80" 
-      : venue.density > 50 
-        ? "bg-warnyellow/80" 
-        : "bg-safeteal/80"
-  }));
+const mapContainerStyle = {
+  width: '100%',
+  height: '100%',
+  borderRadius: '0.5rem',
 };
 
-// Simulate an alert at a random location
-const generateRandomAlert = () => {
-  const alertTypes = ["Suspicious activity", "Potential weapon", "Overcrowding", "Medical emergency", "Fight"];
-  const locations = ["Main Stage", "Food Court", "VIP Area", "Second Stage"];
-  
-  return {
-    type: alertTypes[Math.floor(Math.random() * alertTypes.length)],
-    location: locations[Math.floor(Math.random() * locations.length)],
-    time: new Date().toLocaleTimeString(),
-    resolved: false
-  };
+const libraries = ["visualization"] as ["visualization"]; // Required for HeatmapLayer
+
+const mapOptions = {
+  disableDefaultUI: true,
+  zoomControl: true,
+  streetViewControl: false,
+  mapTypeId: 'satellite',
+  styles: [
+    {
+      featureType: "all",
+      elementType: "labels.text.fill",
+      stylers: [{ color: "#ffffff" }]
+    },
+    {
+      featureType: "all",
+      elementType: "labels.text.stroke",
+      stylers: [{ color: "#000000" }, { lightness: 13 }]
+    },
+    {
+      featureType: "water",
+      elementType: "geometry",
+      stylers: [{ color: "#0e1626" }]
+    },
+    {
+      featureType: "landscape",
+      elementType: "all",
+      stylers: [{ color: "#1a1f2c" }]
+    },
+    {
+      featureType: "poi",
+      elementType: "geometry",
+      stylers: [{ color: "#2a2e39" }]
+    },
+    {
+      featureType: "road",
+      elementType: "geometry.stroke",
+      stylers: [{ color: "#212a37" }]
+    },
+    {
+      featureType: "road",
+      elementType: "geometry.fill",
+      stylers: [{ color: "#404758" }]
+    }
+  ]
 };
 
 interface CrowdHeatmapProps {
@@ -47,15 +64,98 @@ interface CrowdHeatmapProps {
 }
 
 const CrowdHeatmap: React.FC<CrowdHeatmapProps> = ({ securityView = false }) => {
-  const [heatmapData, setHeatmapData] = useState(generateMockHeatmapData());
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: "AIzaSyDmBzWIHq9c40jCUHDBqzl-P-nFi3_zV20", // Using a development key with restrictions
+    libraries
+  });
+
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [heatmapData, setHeatmapData] = useState<google.maps.visualization.WeightedLocation[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [alerts, setAlerts] = useState<Array<any>>([]);
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<any | null>(null);
+  const [areaInfoWindows, setAreaInfoWindows] = useState<any[]>([]);
+  const markersRef = useRef<google.maps.Marker[]>([]);
+  
+  const onLoad = useCallback((map: google.maps.Map) => {
+    setMap(map);
+    
+    // Add area markers
+    const areas = Array(8).fill(0).map(() => getRandomVenueArea());
+    const uniqueAreas = areas.filter((area, index, self) => 
+      self.findIndex(a => a.name === area.name) === index
+    );
+    
+    const newMarkers: google.maps.Marker[] = [];
+    
+    uniqueAreas.forEach(area => {
+      const marker = new google.maps.Marker({
+        position: new google.maps.LatLng(area.lat, area.lng),
+        map: map,
+        title: area.name,
+        label: { 
+          text: area.name.substring(0, 1),
+          color: '#ffffff',
+        },
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: '#33C3F0',
+          fillOpacity: 0.8,
+          strokeWeight: 1,
+          strokeColor: '#ffffff',
+        }
+      });
+      
+      marker.addListener('click', () => {
+        setSelectedArea(area.name);
+        
+        // Calculate simulated crowd density for this area
+        const density = Math.floor(Math.random() * 100);
+        const color = density > 75 ? "#ea384c" : density > 50 ? "#f6ad55" : "#4fd1c5";
+        
+        const contentString = `
+          <div style="padding: 8px; color: #fff; background: rgba(26, 31, 44, 0.9); border-radius: 4px; min-width: 150px;">
+            <h3 style="margin: 0 0 8px; font-weight: bold;">${area.name}</h3>
+            <div style="font-size: 12px; margin-bottom: 6px;">Current density: <span style="color: ${color}">${density}%</span></div>
+            <div style="font-size: 12px;">Personnel: ${Math.floor(Math.random() * 5) + 1} Active</div>
+          </div>
+        `;
+        
+        const infoWindow = new google.maps.InfoWindow({
+          content: contentString,
+          position: new google.maps.LatLng(area.lat, area.lng),
+        });
+        
+        // Close all open infoWindows
+        areaInfoWindows.forEach(window => window.close());
+        setAreaInfoWindows([infoWindow]);
+        
+        infoWindow.open(map);
+      });
+      
+      newMarkers.push(marker);
+    });
+    
+    markersRef.current = newMarkers;
+    
+    // Generate initial heatmap data
+    setHeatmapData(generateMockHeatmapPoints());
+  }, [areaInfoWindows]);
+  
+  const onUnmount = useCallback(() => {
+    setMap(null);
+    // Clean up markers
+    markersRef.current.forEach(marker => marker.setMap(null));
+    markersRef.current = [];
+  }, []);
   
   // Simulate real-time updates to the heatmap
   useEffect(() => {
     const timer = setInterval(() => {
-      setHeatmapData(generateMockHeatmapData());
+      setHeatmapData(generateMockHeatmapPoints());
       
       // Randomly add alerts (10% chance)
       if (Math.random() < 0.1) {
@@ -66,38 +166,23 @@ const CrowdHeatmap: React.FC<CrowdHeatmapProps> = ({ securityView = false }) => 
     return () => clearInterval(timer);
   }, []);
   
-  // Generate a grid of colored cells representing the venue
-  const renderHeatmap = () => {
-    return (
-      <div className="grid grid-cols-3 gap-2 w-full aspect-square">
-        {heatmapData.map((area) => (
-          <div 
-            key={area.id}
-            className={`${area.color} rounded-md p-2 flex flex-col justify-between cursor-pointer transition-all hover:opacity-90 ${selectedArea === area.id ? 'ring-2 ring-white' : ''}`}
-            onClick={() => setSelectedArea(area.id === selectedArea ? null : area.id)}
-          >
-            <div className="flex justify-between items-start">
-              <Badge variant="outline" className="bg-black/50">{area.id}</Badge>
-              {area.density > 75 && <AlertCircle size={20} className="text-white animate-pulse" />}
-            </div>
-            <div className="text-xs text-white font-medium mt-2">{area.name}</div>
-          </div>
-        ))}
-      </div>
-    );
-  };
+  // Clean up infoWindows when component unmounts
+  useEffect(() => {
+    return () => {
+      areaInfoWindows.forEach(window => window.close());
+    };
+  }, [areaInfoWindows]);
   
   const renderAreaDetails = () => {
     if (!selectedArea) return null;
-    const area = heatmapData.find(a => a.id === selectedArea);
-    if (!area) return null;
+    const density = Math.floor(Math.random() * 100); // Simulated data
     
     return (
       <Card className="bg-darkgray-light border-gray-700 p-4 mt-4">
         <div className="flex justify-between items-start">
           <div>
-            <h3 className="text-lg font-bold">{area.name} (Section {area.id})</h3>
-            <div className="text-sm text-muted-foreground mb-2">Current density: {Math.round(area.density)}%</div>
+            <h3 className="text-lg font-bold">{selectedArea}</h3>
+            <div className="text-sm text-muted-foreground mb-2">Current density: {density}%</div>
             
             <div className="grid grid-cols-2 gap-2 text-xs mt-3">
               <div className="p-2 bg-darkgray rounded-md">
@@ -115,11 +200,11 @@ const CrowdHeatmap: React.FC<CrowdHeatmapProps> = ({ securityView = false }) => 
               <div className="p-2 bg-darkgray rounded-md">
                 <div className="text-muted-foreground">Risk Level</div>
                 <div className={`font-medium ${
-                  area.density > 75 ? "text-alertred" : 
-                  area.density > 50 ? "text-warnyellow" : 
+                  density > 75 ? "text-alertred" : 
+                  density > 50 ? "text-warnyellow" : 
                   "text-safeteal"
                 }`}>
-                  {area.density > 75 ? "High" : area.density > 50 ? "Moderate" : "Low"}
+                  {density > 75 ? "High" : density > 50 ? "Moderate" : "Low"}
                 </div>
               </div>
             </div>
@@ -136,7 +221,7 @@ const CrowdHeatmap: React.FC<CrowdHeatmapProps> = ({ securityView = false }) => 
           )}
         </div>
         
-        {area.density > 75 && (
+        {density > 75 && (
           <div className="mt-4 alert-card">
             <div className="flex items-start">
               <AlertCircle className="mr-2 text-alertred" />
@@ -151,6 +236,12 @@ const CrowdHeatmap: React.FC<CrowdHeatmapProps> = ({ securityView = false }) => 
     );
   };
   
+  const closeSelectedArea = () => {
+    setSelectedArea(null);
+    areaInfoWindows.forEach(window => window.close());
+    setAreaInfoWindows([]);
+  };
+  
   return (
     <div className={`relative ${expanded ? 'fixed inset-0 z-50 bg-black/90 p-4 flex flex-col' : ''}`}>
       {expanded && (
@@ -159,32 +250,59 @@ const CrowdHeatmap: React.FC<CrowdHeatmapProps> = ({ securityView = false }) => 
           <Button 
             variant="ghost" 
             size="sm" 
-            onClick={() => setExpanded(false)}
+            onClick={() => {
+              setExpanded(false);
+              closeSelectedArea();
+            }}
           >
             <Minimize2 />
           </Button>
         </div>
       )}
       
-      <div className={`map-container ${expanded ? 'flex-grow overflow-hidden' : ''}`}>
-        {/* Map overlay with simulated heatmap */}
-        <div className="absolute inset-0 bg-darkgray flex items-center justify-center">
-          <div className={`${expanded ? 'w-full max-w-3xl' : 'w-full max-w-md'}`}>
-            {renderHeatmap()}
+      <div className={`map-container relative ${expanded ? 'flex-grow' : 'aspect-video w-full'}`}>
+        {isLoaded ? (
+          <GoogleMap
+            mapContainerStyle={mapContainerStyle}
+            center={venueCenter}
+            zoom={16}
+            onLoad={onLoad}
+            onUnmount={onUnmount}
+            options={mapOptions}
+          >
+            {heatmapData.length > 0 && (
+              <HeatmapLayer
+                data={heatmapData}
+                options={{
+                  radius: 20,
+                  opacity: 0.7,
+                  gradient: [
+                    'rgba(79, 209, 197, 0)',
+                    'rgba(79, 209, 197, 1)',
+                    'rgba(246, 173, 85, 1)',
+                    'rgba(234, 56, 76, 1)'
+                  ]
+                }}
+              />
+            )}
+          </GoogleMap>
+        ) : (
+          <div className="w-full h-full bg-darkgray flex items-center justify-center">
+            Loading Maps...
           </div>
-          
-          {/* Toggle expand button */}
-          {!expanded && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="absolute top-2 right-2" 
-              onClick={() => setExpanded(true)}
-            >
-              <Maximize2 />
-            </Button>
-          )}
-        </div>
+        )}
+        
+        {/* Toggle expand button */}
+        {!expanded && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="absolute top-2 right-2 bg-black/50" 
+            onClick={() => setExpanded(true)}
+          >
+            <Maximize2 />
+          </Button>
+        )}
       </div>
       
       {/* Alert indicators */}
