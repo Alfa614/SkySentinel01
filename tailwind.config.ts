@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,7 +62,37 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
-				}
+				},
+        // SkySentinel custom colors
+        skyblue: {
+          DEFAULT: '#2AB7CA',
+          dark: '#1A95A6',
+          light: '#5FCBDA'
+        },
+        deepblue: {
+          DEFAULT: '#0A2463',
+          dark: '#071847',
+          light: '#2C457F'
+        },
+        alertred: {
+          DEFAULT: '#E71D36',
+          dark: '#B61529',
+          light: '#F04D61'
+        },
+        warnyellow: {
+          DEFAULT: '#F5C022',
+          dark: '#D9A610',
+          light: '#F8D466'
+        },
+        safeteal: {
+          DEFAULT: '#41B3A3',
+          dark: '#338F82',
+          light: '#68C5B8'
+        },
+        darkgray: {
+          DEFAULT: '#121212',
+          light: '#1E1E1E'
+        }
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
@@ -70,25 +101,27 @@ export default {
 			},
 			keyframes: {
 				'accordion-down': {
-					from: {
-						height: '0'
-					},
-					to: {
-						height: 'var(--radix-accordion-content-height)'
-					}
+					from: { height: '0' },
+					to: { height: 'var(--radix-accordion-content-height)' }
 				},
 				'accordion-up': {
-					from: {
-						height: 'var(--radix-accordion-content-height)'
-					},
-					to: {
-						height: '0'
-					}
-				}
+					from: { height: 'var(--radix-accordion-content-height)' },
+					to: { height: '0' }
+				},
+        'pulse-alert': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.5' }
+        },
+        'slide-in-right': {
+          '0%': { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(0)' }
+        }
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+        'pulse-alert': 'pulse-alert 2s ease-in-out infinite',
+        'slide-in-right': 'slide-in-right 0.3s ease-out'
 			}
 		}
 	},
